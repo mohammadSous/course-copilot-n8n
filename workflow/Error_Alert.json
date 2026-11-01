@@ -1,5 +1,5 @@
 {
-  "name": "Homework – error alert",
+  "name": "Course Copilot – error alert",
   "nodes": [
     {
       "parameters": {},
@@ -15,9 +15,9 @@
     {
       "parameters": {
         "sendTo": "you@example.com",
-        "subject": "⚠️ Homework workflow failed",
+        "subject": "⚠️ Course Copilot workflow failed",
         "emailType": "text",
-        "message": "=The homework workflow failed.\n\nWorkflow: {{ $json.workflow.name }}\nNode: {{ $json.execution.lastNodeExecuted }}\nError: {{ $json.execution.error.message }}\nTime: {{ $now.setZone('Asia/Amman').toFormat('dd/MM/yyyy HH:mm') }}\nExecution: {{ $json.execution.url }}\n\nIf the error mentions \"invalidtoken\", refresh your Moodle token.",
+        "message": "=The Course Copilot workflow failed.\n\nWorkflow: {{ $json.workflow.name }}\nNode: {{ $json.execution.lastNodeExecuted }}\nError: {{ $json.execution.error.message }}\nTime: {{ $now.setZone('Asia/Amman').toFormat('dd/MM/yyyy HH:mm') }}\nExecution: {{ $json.execution.url }}\n\nIf the error mentions \"invalidtoken\", refresh your Moodle token.",
         "options": {
           "appendAttribution": false
         }
@@ -33,7 +33,6 @@
       "webhookId": "bfc2ac13-27cf-4cf0-871c-16a40caf8cc4",
       "credentials": {
         "gmailOAuth2": {
-          "id": "M8BtZgU6GYcgWrmM",
           "name": "Gmail account"
         }
       }

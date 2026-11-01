@@ -1,5 +1,5 @@
 {
-  "name": "Homework Autopilot",
+  "name": "Course Copilot",
   "nodes": [
     {
       "parameters": {
@@ -141,7 +141,6 @@
       "name": "Get assignments",
       "credentials": {
         "httpQueryAuth": {
-          "id": "lzSIoQ8Gb2mS4y2I",
           "name": "ZUJ Moodle API token"
         }
       },
@@ -255,7 +254,6 @@
       "name": "Download assignment file",
       "credentials": {
         "httpQueryAuth": {
-          "id": "XvrEUxPolGGdBcno",
           "name": "ZUJ Moodle file token"
         }
       },
@@ -323,7 +321,6 @@
       "name": "Get course files",
       "credentials": {
         "httpQueryAuth": {
-          "id": "lzSIoQ8Gb2mS4y2I",
           "name": "ZUJ Moodle API token"
         }
       },
@@ -364,7 +361,6 @@
       "name": "Choose files",
       "credentials": {
         "googlePalmApi": {
-          "id": "ZFvb7E7v12iRQt4j",
           "name": "Google Gemini(PaLM) Api account"
         }
       },
@@ -406,7 +402,6 @@
       "name": "Download chosen",
       "credentials": {
         "httpQueryAuth": {
-          "id": "XvrEUxPolGGdBcno",
           "name": "ZUJ Moodle file token"
         }
       },
@@ -448,7 +443,6 @@
       "name": "Analyze document",
       "credentials": {
         "googlePalmApi": {
-          "id": "ZFvb7E7v12iRQt4j",
           "name": "Google Gemini(PaLM) Api account"
         }
       },
@@ -497,7 +491,6 @@
       "name": "Upload as Google Doc",
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "iocYyHOM5oTeGUPb",
           "name": "Google Drive account"
         }
       },
@@ -530,7 +523,6 @@
       "name": "Download as docx",
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "iocYyHOM5oTeGUPb",
           "name": "Google Drive account"
         }
       },
@@ -562,7 +554,6 @@
       "webhookId": "ac7fc5b4-fcae-4519-9764-82ac386e207f",
       "credentials": {
         "gmailOAuth2": {
-          "id": "M8BtZgU6GYcgWrmM",
           "name": "Gmail account"
         }
       }
@@ -589,7 +580,6 @@
       "name": "Delete temp Google Doc",
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "iocYyHOM5oTeGUPb",
           "name": "Google Drive account"
         }
       },
@@ -610,7 +600,7 @@
     },
     {
       "parameters": {
-        "content": "## Homework Autopilot\nEdit **Settings** first: your email, Moodle URL, models.\n\n- **alreadySentIds**: comma-separated assignment IDs to never send (for migration)\n- **testOnlyAssignmentId**: set an ID to reprocess just that assignment in a manual run; leave empty normally\n\nCredentials needed: Moodle API token (query param `wstoken`), Moodle file token (query param `token`), Gemini API key, Google Drive OAuth2, Gmail OAuth2.",
+        "content": "## Course Copilot\nEdit **Settings** first: your email, Moodle URL, models.\n\n- **alreadySentIds**: comma-separated assignment IDs to never send (for migration)\n- **testOnlyAssignmentId**: set an ID to reprocess just that assignment in a manual run; leave empty normally\n\nCredentials needed: Moodle API token (query param `wstoken`), Moodle file token (query param `token`), Gemini API key, Google Drive OAuth2, Gmail OAuth2.",
         "height": 260,
         "width": 520
       },

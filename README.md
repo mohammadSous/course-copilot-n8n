@@ -1,4 +1,4 @@
-# Homework Autopilot (n8n)
+# Course Copilot (n8n)
 
 A self-hosted **n8n** workflow that connects to my university's **Moodle** LMS through its official Web Services API, detects new assignments, picks the relevant lecture files, and emails me an **interactive study guide** (Word document) with page-level citations to the course slides.
 
@@ -42,7 +42,7 @@ The picker (Gemini #1) stays on Flash-Lite; the study guide (Gemini #2) uses Fla
    docker compose up -d
    ```
    Open http://localhost:5678 and create the local owner account.
-2. **Import** `workflow/Error_Alert.json` and `workflow/Homework_Autopilot.json` (⋯ → Import from file).
+2. **Import** `workflow/Error_Alert.json` and `workflow/Course_Copilot.json` (⋯ → Import from file).
 3. **Create credentials** in n8n:
    | Credential | Type | Notes |
    |---|---|---|
@@ -51,7 +51,7 @@ The picker (Gemini #1) stays on Flash-Lite; the study guide (Gemini #2) uses Fla
    | Gemini | Google Gemini (PaLM) API | free key from aistudio.google.com, no billing needed |
    | Google Drive / Gmail | OAuth2 | your own Google Cloud project, Drive + Gmail APIs enabled, redirect URI `http://localhost:5678/rest/oauth2-credential/callback` |
 4. **Edit the Settings node**: your email, Moodle URL, models, max lecture files.
-5. In the main workflow: **⋯ → Settings → Error workflow → "Homework – error alert"**, save, then **Publish** both workflows.
+5. In the main workflow: **⋯ → Settings → Error workflow → "Course Copilot – error alert"**, save, then **Publish** both workflows.
 
 ### How the Moodle token works
 
@@ -98,4 +98,4 @@ This uses an API the university enabled for its mobile app, for the student's ow
 
 ## Docs
 
-A 12-page explainer of the architecture (Moodle API, token flow, Docker, every node, AI pipeline, security and cost): [`docs/Homework-Autopilot-How-it-works.pdf`](docs/Homework-Autopilot-How-it-works.pdf).
+A 12-page explainer of the architecture (Moodle API, token flow, Docker, every node, AI pipeline, security and cost): [`docs/How-it-works.pdf`](docs/How-it-works.pdf).
