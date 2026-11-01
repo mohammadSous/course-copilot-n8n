@@ -1,0 +1,934 @@
+{
+  "name": "Homework Autopilot",
+  "nodes": [
+    {
+      "parameters": {
+        "events": [
+          "init"
+        ]
+      },
+      "type": "n8n-nodes-base.n8nTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -200
+      ],
+      "id": "8f5b2ec2-a7e2-47f1-a86d-d8c3a5770880",
+      "name": "On startup"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "4af5d639-d578-4049-b430-d23ce474c949",
+      "name": "Run manually"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            },
+            {
+              "triggerAtHour": 18
+            },
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        200
+      ],
+      "id": "77815f48-5996-421d-9fd0-cb39caa74c3c",
+      "name": "Schedule (09:00 / 18:00 / 00:00)"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7bccc224-a72c-452a-a169-6de1a0246879",
+              "name": "email",
+              "value": "you@example.com",
+              "type": "string"
+            },
+            {
+              "id": "db1021a9-2d82-4ad7-9d50-0ae689a2abcb",
+              "name": "moodleUrl",
+              "value": "https://elearning.zuj.edu.jo",
+              "type": "string"
+            },
+            {
+              "id": "a841670b-a570-4a5a-8f12-5a3e1822af65",
+              "name": "pickerModel",
+              "value": "models/gemini-flash-lite-latest",
+              "type": "string"
+            },
+            {
+              "id": "6dbe595c-bd7a-4fdf-bfc3-4300dcedcdf9",
+              "name": "studyModel",
+              "value": "models/gemini-flash-latest",
+              "type": "string"
+            },
+            {
+              "id": "fc75d564-ed78-4419-8ab2-beaa68724583",
+              "name": "maxLectureFiles",
+              "value": 4,
+              "type": "number"
+            },
+            {
+              "id": "27215ebf-def1-4cd1-9199-b03fe841c286",
+              "name": "alreadySentIds",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "1fe17ee7-ca08-4ab6-901f-a77916b07d87",
+              "name": "testOnlyAssignmentId",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ],
+      "id": "e4375e63-7cc5-47b9-8b58-53e6a36a08da",
+      "name": "Settings"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Settings').first().json.moodleUrl }}/webservice/rest/server.php",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "wsfunction",
+              "value": "mod_assign_get_assignments"
+            },
+            {
+              "name": "moodlewsrestformat",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        460,
+        0
+      ],
+      "id": "f7ce0717-86a5-48f9-ab0b-98de5be97a4d",
+      "name": "Get assignments",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "lzSIoQ8Gb2mS4y2I",
+          "name": "ZUJ Moodle API token"
+        }
+      },
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turns Moodle's nested reply into one item per open assignment.\nconst res = $input.first().json;\nif (res.exception || res.errorcode) {\n  // e.g. errorcode 'invalidtoken' -> the error workflow emails you\n  throw new Error(`Moodle API error: ${res.errorcode || ''} ${res.message || ''}`.trim());\n}\nconst out = [];\nfor (const course of res.courses || []) {\n  // keep only the English part of the course name\n  const m = course.fullname.match(/\\{mlang en\\}(.*?)\\{mlang\\}/);\n  const courseName = m ? m[1] : course.fullname;\n\n  for (const a of course.assignments) {\n    if (a.duedate * 1000 < Date.now()) continue; // skip assignments already past due\n\n    // attachments + files embedded in the description (images etc.)\n    let files = [...(a.introattachments || []), ...(a.introfiles || [])]\n      .map(f => ({ name: f.filename, url: f.fileurl, type: f.mimetype }));\n\n    // fallback: <img src=\"...\"> tags inside the description\n    for (const [, src] of (a.intro || '').matchAll(/<img[^>]+src=\"([^\"]+)\"/g)) {\n      if (!files.some(f => f.url === src)) {\n        files.push({ name: src.split('/').pop(), url: src, type: 'image' });\n      }\n    }\n\n    // plain-text version of the description\n    const text = (a.intro || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\\s+/g, ' ').trim();\n\n    out.push({ json: {\n      course: courseName,\n      courseId: course.id,\n      assignmentId: a.id,\n      name: a.name,\n      due: new Date(a.duedate * 1000).toLocaleString('en-GB', { timeZone: 'Asia/Amman' }),\n      instructions: text,\n      files,\n    }});\n  }\n}\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        0
+      ],
+      "id": "6e02eefa-7af8-4328-969c-fe4f00f47a24",
+      "name": "Clean up list"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Keep only assignments that haven't been emailed yet.\n// \"sent\" is remembered in the workflow's static data, which n8n only SAVES\n// during automatic (published) runs. Manual runs read it but don't change it.\nconst s = $('Settings').first().json;\nconst store = $getWorkflowStaticData('global');\nconst sent = store.sent || {};\nconst seeded = String(s.alreadySentIds || '').split(',').map(x => x.trim()).filter(Boolean);\nconst testId = String(s.testOnlyAssignmentId || '').trim();\n\nreturn $input.all().filter(item => {\n  const id = String(item.json.assignmentId);\n  if (testId) return id === testId;          // test mode: only this one, even if already sent\n  return !sent[id] && !seeded.includes(id);\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        0
+      ],
+      "id": "f748051c-24cf-4d97-9e05-8d57594bed1a",
+      "name": "Pick new assignments"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "240ecbb5-b6dd-48a8-963f-e8df44f972fa",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "jsCode": "// One assignment per loop round. Later nodes read it as $('Current assignment').\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        120
+      ],
+      "id": "d31e049d-1e18-489a-ac93-91284c811725",
+      "name": "Current assignment"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3ef41a62-ab05-4967-869a-b8e645128a7b",
+              "leftValue": "={{ $json.files.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1560,
+        120
+      ],
+      "id": "2391719c-1b05-41e4-b1ef-aa4855378439",
+      "name": "Has a file?"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.files[0].url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1780,
+        20
+      ],
+      "id": "3d3b634e-e511-4b77-9d59-7024f93b23b8",
+      "name": "Download assignment file",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "XvrEUxPolGGdBcno",
+          "name": "ZUJ Moodle file token"
+        }
+      },
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// No attachment or image: turn the typed instructions into a small text file,\n// so the rest of the workflow can treat it like any other assignment file.\nconst a = $('Current assignment').first().json;\nconst text = `Course: ${a.course}\\nAssignment: ${a.name}\\nDue: ${a.due}\\n\\n${a.instructions || '(The assignment has no description.)'}`;\nreturn [{\n  json: {},\n  binary: {\n    data: {\n      data: Buffer.from(text, 'utf8').toString('base64'),\n      mimeType: 'text/plain',\n      fileName: 'assignment.txt',\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        220
+      ],
+      "id": "47ec64a5-6902-48b8-b5f7-85a6f0a9d80d",
+      "name": "Instructions as file"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Both branches meet here; later nodes read the file as $('Assignment file').\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        120
+      ],
+      "id": "fa642882-84a7-4ed3-beca-ed3c428d762e",
+      "name": "Assignment file"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Settings').first().json.moodleUrl }}/webservice/rest/server.php",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "wsfunction",
+              "value": "core_course_get_contents"
+            },
+            {
+              "name": "moodlewsrestformat",
+              "value": "json"
+            },
+            {
+              "name": "courseid",
+              "value": "={{ $('Current assignment').first().json.courseId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2220,
+        120
+      ],
+      "id": "aab1a49e-cee0-47c5-8e72-36f10809e0b8",
+      "name": "Get course files",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "lzSIoQ8Gb2mS4y2I",
+          "name": "ZUJ Moodle API token"
+        }
+      },
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const files = [];\nconst seen = new Set();\nfor (const item of $input.all()) {             // one item per course section\n  const section = item.json;\n  for (const mod of section.modules || []) {\n    for (const f of mod.contents || []) {\n      if (f.type !== 'file' || f.mimetype !== 'application/pdf') continue;\n      if (seen.has(f.filename)) continue;      // skip duplicates\n      seen.add(f.filename);\n      files.push({\n        n: files.length + 1,\n        section: section.name.replace(/&amp;/g, '&'),\n        title: mod.name.replace(/&amp;/g, '&'),\n        fileName: f.filename,\n        url: f.fileurl,\n      });\n    }\n  }\n}\nconst menu = files.map(f => `${f.n}. [${f.section}] ${f.title} (${f.fileName})`).join('\\n');\n\n// carry the assignment file along so the next Gemini call can read it\nreturn [{ json: { files, menu }, binary: { data: $('Assignment file').first().binary.data } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        120
+      ],
+      "id": "11194e50-20fb-4a87-afb4-44c4609c99ac",
+      "name": "List course files"
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "modelId": {
+          "__rl": true,
+          "value": "={{ $('Settings').first().json.pickerModel }}",
+          "mode": "id"
+        },
+        "text": "=The attached file is a university assignment (a PDF, an image of the questions, or plain text).\nAssignment: {{ $('Current assignment').first().json.name }} ({{ $('Current assignment').first().json.course }})\nDescription text (may be empty): {{ $('Current assignment').first().json.instructions }}\n\nBelow is a numbered list of this course's lecture files. Pick up to {{ $('Settings').first().json.maxLectureFiles }} files that are most useful for understanding and solving this assignment. Prefer the main slides for each relevant topic; add notes or examples only if clearly helpful.\nReply with ONLY a JSON array of the numbers, for example [3, 7, 12]. If nothing is relevant, reply [].\n\n{{ $json.menu }}",
+        "inputType": "binary",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        2660,
+        120
+      ],
+      "id": "9a0a905c-43b6-43e0-8288-c312f7233843",
+      "name": "Choose files",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "ZFvb7E7v12iRQt4j",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gemini's reply, e.g. \"[1, 7, 23]\" or \"```json [1, 7, 23] ```\"\nconst raw = $input.first().json.content.parts[0].text;\nconst match = raw.match(/\\[[\\d,\\s]*\\]/);\nlet picks = [];\ntry { picks = match ? JSON.parse(match[0]) : []; } catch (e) { picks = []; }\n\nconst files = $('List course files').first().json.files;\nlet chosen = [...new Set(picks)]\n  .map(n => files.find(f => f.n === n))\n  .filter(Boolean)          // ignore numbers that don't exist\n  .slice(0, Number($('Settings').first().json.maxLectureFiles) || 4);\n\n// fallback: if Gemini picked nothing usable, take the first file\n// so the rest of the workflow still runs\nif (chosen.length === 0) chosen = files.slice(0, 1);\n\nreturn chosen.map(f => ({ json: f }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        120
+      ],
+      "id": "889c6b67-f6a7-4d2d-9d3e-a02367be49cd",
+      "name": "Split chosen"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3100,
+        120
+      ],
+      "id": "5b595f92-504d-42dc-a4c0-491e667042dc",
+      "name": "Download chosen",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "XvrEUxPolGGdBcno",
+          "name": "ZUJ Moodle file token"
+        }
+      },
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// start with the assignment file (PDF, image or text)\nconst binary = { assignment: $('Assignment file').first().binary.data };\nconst names = ['assignment'];\nconst lines = ['1. assignment: the assignment itself'];\n\n// add each downloaded lecture file\nconst picked = $('Split chosen').all();\n$input.all().forEach((item, i) => {\n  const key = `slide${i + 1}`;\n  binary[key] = item.binary.data;\n  names.push(key);\n  const f = picked[i].json;\n  lines.push(`${i + 2}. ${key}: ${f.fileName} | \"${f.title}\" (section: ${f.section})`);\n});\n\nreturn [{\n  json: {\n    binaryNames: names.join(','),   // e.g. \"assignment,slide1,slide2\"\n    fileList: lines.join('\\n'),\n  },\n  binary,\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3320,
+        120
+      ],
+      "id": "cc5356ab-808b-4b49-bb2f-ccc7afe9bd30",
+      "name": "Bundle"
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "modelId": {
+          "__rl": true,
+          "value": "={{ $('Settings').first().json.studyModel }}",
+          "mode": "id"
+        },
+        "text": "=You are an expert tutor at Al-Zaytoonah University of Jordan. Turn the attached assignment into an interactive study guide that teaches the student how to solve it.\n\nCourse: {{ $('Current assignment').first().json.course }}\nAssignment: {{ $('Current assignment').first().json.name }}\nDue: {{ $('Current assignment').first().json.due }}\nAssignment description text (may be empty): {{ $('Current assignment').first().json.instructions }}\nThe attached assignment file may be a PDF, an image of the questions, or plain text.\nAttached files, in this order:\n{{ $json.fileList }}\n\nThe first file is the assignment. The others are this course's lecture files. In each Core Concept, cite the lecture file and page where the topic is covered (e.g., \"08_Graphs.pdf, p. 12\"), and only cite pages you actually saw in the attached files. If none of the attached lecture files covers a topic, write \"Review: [topic]\" instead.\n\nFor EACH question or task in the assignment, in its original order and numbering, write:\n1. Core Concept: the topic(s) it tests. If course slides or notes are attached, cite the exact file and slide/page number. If not, write \"Review: [topic name]\". Never invent lecture or slide numbers.\n2. Guided Logic Breakdown: explain the theory, formulas, and reasoning step by step, so the reader learns the concept while reading.\n3. Worked Solution and Check: walk through the solution clearly, then give 1–2 quick self-check questions with short answers so the student can verify their understanding.\n4. Key Takeaway: one sentence to remember for exams.\n\nIf a task is a project or open-ended deliverable rather than a question, use the same structure but explain how to approach it, what a strong answer includes, and common mistakes, instead of a worked solution. Anything only the student or team can decide (names, IDs, topic choice) gets a [TO FILL: ...] placeholder.\n\nRules:\n- Never invent references, papers, authors, URLs, dataset names, or statistics. If an example citation or link is useful for illustration, it must be obviously fictional and labeled, e.g. [EXAMPLE FORMAT ONLY – not a real paper]. Use [VERIFY] only for well-known real sources (e.g., \"Introduction to Algorithms\" by Cormen et al.), never for specific papers or links you cannot confirm.\n- No LaTeX or $...$ notation. Write math in plain text or simple HTML (O(n log n), x<sup>2</sup>, a<sub>i</sub>).\n- Code must be complete, runnable Python with comments.\n- For mathematical proofs (e.g., asymptotic bounds), give explicit constants (such as c and n0) and verify them numerically; justify why an inequality keeps holding after n0.\n- Be concise: short steps, no repetition.\n- Write in clear, plain English.\n\nOutput format: clean HTML only, no markdown, no code fences around the whole answer. Use <h1> for the title, <h2> per question, <h3> for the four sections, plus <p>, <ul>, <ol>, <table>, and <pre><code>. This will be converted into a Word document.",
+        "inputType": "binary",
+        "binaryPropertyName": "={{ $json.binaryNames }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        3540,
+        120
+      ],
+      "id": "d560c39a-8811-4475-adf5-e2f9ad23ff83",
+      "name": "Analyze document",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "ZFvb7E7v12iRQt4j",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gemini's HTML answer (strip ``` fences in case it added them)\nconst parts = $input.first().json.content?.parts || [];\nconst html = parts.filter(p => p.text && !p.thought).map(p => p.text).join('')\n  .replace(/^```html\\s*/i, '')\n  .replace(/```\\s*$/, '')\n  .trim();\n\n// Build a clean file name like \"20261-Algorithms-AllSec-3-F - Phase 1\"\nconst a = $('Current assignment').first().json;\nconst fileName = `${a.course} - ${a.name}`.replace(/[\\\\/:*?\"<>|]/g, '');\n\n// Wrap it as a full HTML page (utf-8 keeps Arabic text safe)\nconst page = `<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>${fileName}</title></head><body>${html}</body></html>`;\n\nreturn [{\n  json: { fileName },\n  binary: {\n    data: {\n      data: Buffer.from(page, 'utf8').toString('base64'),\n      mimeType: 'text/html',\n      fileName: fileName + '.html',\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3760,
+        120
+      ],
+      "id": "486a57e2-1928-41a2-b6d1-d7e09865a563",
+      "name": "Make HTML file"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/upload/drive/v2/files?uploadType=media&convert=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "text/html"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3980,
+        120
+      ],
+      "id": "29e2ef5e-d078-412a-8273-8a885286b934",
+      "name": "Upload as Google Doc",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "iocYyHOM5oTeGUPb",
+          "name": "Google Drive account"
+        }
+      },
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            }
+          },
+          "fileName": "={{ $('Make HTML file').first().json.fileName }} - Study guide.docx"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        4200,
+        120
+      ],
+      "id": "07797c5f-a3e4-4da7-9888-d41034035ac1",
+      "name": "Download as docx",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "iocYyHOM5oTeGUPb",
+          "name": "Google Drive account"
+        }
+      },
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Settings').first().json.email }}",
+        "subject": "=Study guide: {{ $('Current assignment').first().json.course }} – {{ $('Current assignment').first().json.name }}",
+        "emailType": "text",
+        "message": "=Your study guide is ready (attached).\n\nCourse: {{ $('Current assignment').first().json.course }}\nAssignment: {{ $('Current assignment').first().json.name }}\nDue: {{ $('Current assignment').first().json.due }}\n\nLecture files used for citations:\n{{ $('Split chosen').all().map(i => '- ' + i.json.fileName + ' (' + i.json.section + ')').join('\\n') }}\n\nBefore you submit anything: double-check the cited pages, fill in every [TO FILL], and confirm any [VERIFY] source yourself.",
+        "options": {
+          "appendAttribution": false,
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {}
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        4420,
+        120
+      ],
+      "id": "a4cbb1b0-6e71-404d-9fae-61f81802a189",
+      "name": "Email Me",
+      "webhookId": "ac7fc5b4-fcae-4519-9764-82ac386e207f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "M8BtZgU6GYcgWrmM",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "deleteFile",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Upload as Google Doc').first().json.id }}",
+          "mode": "id"
+        },
+        "options": {
+          "deletePermanently": true
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        4640,
+        120
+      ],
+      "id": "f7d81b51-ecb2-43e7-b369-9de652f5c410",
+      "name": "Delete temp Google Doc",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "iocYyHOM5oTeGUPb",
+          "name": "Google Drive account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Only reached after the email was sent, so a failed run gets retried next time.\nconst store = $getWorkflowStaticData('global');\nstore.sent = store.sent || {};\nconst a = $('Current assignment').first().json;\nstore.sent[String(a.assignmentId)] = new Date().toISOString();\nreturn [{ json: { markedAsSent: a.assignmentId, name: a.name } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4860,
+        120
+      ],
+      "id": "a4572254-99c1-49b9-8c4c-8274e409a622",
+      "name": "Mark as sent"
+    },
+    {
+      "parameters": {
+        "content": "## Homework Autopilot\nEdit **Settings** first: your email, Moodle URL, models.\n\n- **alreadySentIds**: comma-separated assignment IDs to never send (for migration)\n- **testOnlyAssignmentId**: set an ID to reprocess just that assignment in a manual run; leave empty normally\n\nCredentials needed: Moodle API token (query param `wstoken`), Moodle file token (query param `token`), Gemini API key, Google Drive OAuth2, Gmail OAuth2.",
+        "height": 260,
+        "width": 520
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        200,
+        -420
+      ],
+      "id": "b53d32c1-ca79-47d6-9d63-92385ff2b3d3",
+      "name": "Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On startup": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run manually": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule (09:00 / 18:00 / 00:00)": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Get assignments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get assignments": {
+      "main": [
+        [
+          {
+            "node": "Clean up list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean up list": {
+      "main": [
+        [
+          {
+            "node": "Pick new assignments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick new assignments": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Current assignment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Current assignment": {
+      "main": [
+        [
+          {
+            "node": "Has a file?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has a file?": {
+      "main": [
+        [
+          {
+            "node": "Download assignment file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Instructions as file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download assignment file": {
+      "main": [
+        [
+          {
+            "node": "Assignment file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instructions as file": {
+      "main": [
+        [
+          {
+            "node": "Assignment file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assignment file": {
+      "main": [
+        [
+          {
+            "node": "Get course files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get course files": {
+      "main": [
+        [
+          {
+            "node": "List course files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List course files": {
+      "main": [
+        [
+          {
+            "node": "Choose files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Choose files": {
+      "main": [
+        [
+          {
+            "node": "Split chosen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split chosen": {
+      "main": [
+        [
+          {
+            "node": "Download chosen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download chosen": {
+      "main": [
+        [
+          {
+            "node": "Bundle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bundle": {
+      "main": [
+        [
+          {
+            "node": "Analyze document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze document": {
+      "main": [
+        [
+          {
+            "node": "Make HTML file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make HTML file": {
+      "main": [
+        [
+          {
+            "node": "Upload as Google Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload as Google Doc": {
+      "main": [
+        [
+          {
+            "node": "Download as docx",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download as docx": {
+      "main": [
+        [
+          {
+            "node": "Email Me",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Me": {
+      "main": [
+        [
+          {
+            "node": "Delete temp Google Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete temp Google Doc": {
+      "main": [
+        [
+          {
+            "node": "Mark as sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as sent": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

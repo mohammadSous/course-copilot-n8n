@@ -1,0 +1,8 @@
+# never commit secrets or personal data
+.env
+*.token
+credentials*.json
+# course material / generated guides stay private
+*.pdf
+!docs/*.pdf
+*.docx

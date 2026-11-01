@@ -1,0 +1,66 @@
+{
+  "name": "Homework – error alert",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "749509d1-a73c-448b-a85c-14111c5d5fdf",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "sendTo": "you@example.com",
+        "subject": "⚠️ Homework workflow failed",
+        "emailType": "text",
+        "message": "=The homework workflow failed.\n\nWorkflow: {{ $json.workflow.name }}\nNode: {{ $json.execution.lastNodeExecuted }}\nError: {{ $json.execution.error.message }}\nTime: {{ $now.setZone('Asia/Amman').toFormat('dd/MM/yyyy HH:mm') }}\nExecution: {{ $json.execution.url }}\n\nIf the error mentions \"invalidtoken\", refresh your Moodle token.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "8d81c573-c74b-435c-87c6-7eafeb149aa6",
+      "name": "Email alert",
+      "webhookId": "bfc2ac13-27cf-4cf0-871c-16a40caf8cc4",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "M8BtZgU6GYcgWrmM",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Email alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "tags": []
+}
